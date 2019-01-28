@@ -1,0 +1,72 @@
+---
+title: "raysahder"
+author: "Geoffrey Arnold"
+date: "1/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# installation
+# devtools::install_github("tylermorganwall/rayshader")
+require(raster)
+require(rayshader)
+require(rgdal)
+require(elevatr)
+
+pitBounds <- readOGR("http://pghgis-pittsburghpa.opendata.arcgis.com/datasets/a99f25fffb7b41c8a4adf9ea676a3a0b_0.geojson")
+
+elv <- get_elev_raster(pitBounds, z =14)
+
+elvCrop <- crop(elv, extent(pitBounds))
+pitElv <- mask(elvCrop, pitBounds)
+
+pitM <- matrix(raster::extract(pitElv,raster::extent(pitElv), buffer=1000),
+               nrow=ncol(pitElv),ncol=nrow(pitElv))
+
+elvM <- matrix(raster::extract(elvCrop, raster::extent(elvCrop), buffer=1000),
+               nrow=ncol(elvCrop),ncol=nrow(elvCrop))
+
+rayElv <- ray_shade(elvM, lambert = TRUE)
+ambElv <- ambient_shade(elvM)
+```
+
+## Quick Map for testing textures
+
+```{r}
+elvM %>%
+  sphere_shade(texture = "imhof1") %>%
+  add_water(detect_water(elvM), color = "imhof1") %>%
+  plot_map()
+```
+
+## Full Map
+
+```{r map}
+elvM %>%
+  sphere_shade(texture = "imhof1") %>%
+  add_water(detect_water(elvM), color= "imhof1") %>%
+  add_shadow(rayElv, 0.7) %>%
+  add_shadow(ambElv) %>%
+  save_png("pittsburgh.png", rotate = 0)
+```
+
+
+## 3D Map
+
+```{r}
+thetavalues <- 90 + 45 * cos(seq(0, 1 * pi, length.out = 180))
+
+for (i in 1:180) {
+ elvM %>%
+  sphere_shade(texture = "imhof1") %>%
+  add_shadow(rayElv, 0.7) %>%
+  add_shadow(ambElv) %>%
+  plot_3d(elvM, solid = TRUE, water = TRUE, shadow = TRUE, watercolor = "lightblue", background = "white", waterdepth = 0, windowsize = c(1000, 800), wateralpha = 0.7, waterlinealpha = 0.5, theta = thetavalues[i])
+  
+  rgl::snapshot3d(paste0("3d_pittsburgh_", i ,".png"))
+}
+
+rgl::rgl.close()
+```
+

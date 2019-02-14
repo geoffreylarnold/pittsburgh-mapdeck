@@ -13,12 +13,15 @@ require(raster)
 require(rayshader)
 require(rgdal)
 require(elevatr)
+require(rgl)
+
+source("map-image-api.R")
 
 pitBounds <- readOGR("http://pghgis-pittsburghpa.opendata.arcgis.com/datasets/a99f25fffb7b41c8a4adf9ea676a3a0b_0.geojson")
 
 elv <- get_elev_raster(pitBounds, z =14)
 
-elvCrop <- crop(elv, extent(pitBounds))
+elvCrop <- crop(elv, pitBounds@bbox)
 pitElv <- mask(elvCrop, pitBounds)
 
 pitM <- matrix(raster::extract(pitElv,raster::extent(pitElv), buffer=1000),
@@ -29,14 +32,27 @@ elvM <- matrix(raster::extract(elvCrop, raster::extent(elvCrop), buffer=1000),
 
 rayElv <- ray_shade(elvM, lambert = TRUE)
 ambElv <- ambient_shade(elvM)
+waterMap <- detect_water(elvM)
+
+bbox <- as.data.frame(pitBounds@bbox)
+
+bbox <- list(
+  p1 = list(long = bbox$min[1], lat = bbox$min[2]),
+  p2 = list(long = bbox$max[1], lat = bbox$max[2])
+)
+
+overlay_file <- "images/basemap.png"
+image <- get_arcgis_map_image(bbox, map_type = "World_Imagery", file = overlay_file, width = 5351, height = 4262)
+overlay_img <- png::readPNG(overlay_file)
 ```
 
 ## Quick Map for testing textures
 
 ```{r}
 elvM %>%
-  sphere_shade(texture = "imhof1") %>%
-  add_water(detect_water(elvM), color = "imhof1") %>%
+  sphere_shade(texture = "imhof4") %>%
+  add_water(waterMap, color = "imhof4") %>%
+  add_overlay(overlay_img, alphalayer = 0.5) %>%
   plot_map()
 ```
 
@@ -45,14 +61,34 @@ elvM %>%
 ```{r map}
 elvM %>%
   sphere_shade(texture = "imhof1") %>%
-  add_water(detect_water(elvM), color= "imhof1") %>%
+  add_water(waterMap, color= "imhof1") %>%
   add_shadow(rayElv, 0.7) %>%
   add_shadow(ambElv) %>%
-  save_png("pittsburgh.png", rotate = 0)
+  save_png("images/pittsburgh.png", rotate = 0)
 ```
 
 
-## 3D Map
+## 3D Map Single
+
+```{r}
+zscale <- 10
+rgl::clear3d()
+
+elvM %>% 
+  sphere_shade(texture = "imhof4") %>% 
+  add_water(waterMap, color = "imhof4") %>%
+  add_shadow(rayElv, max_darken = 0.5) %>%
+  add_shadow(ambElv, max_darken = 0.5) %>%
+  plot_3d(elvM, zscale = zscale, windowsize = c(1200, 1000),
+          water = TRUE, soliddepth = -max(elvM)/zscale, wateralpha = 0,
+          theta = 25, phi = 30, zoom = 0.65, fov = 60)
+
+render_snapshot("images/3d_pittsburgh_imagery.png")
+
+rgl::close()
+```
+
+## 3D Gif
 
 ```{r}
 thetavalues <- 90 + 45 * cos(seq(0, 1 * pi, length.out = 180))
@@ -62,6 +98,7 @@ for (i in 1:180) {
   sphere_shade(texture = "imhof1") %>%
   add_shadow(rayElv, 0.7) %>%
   add_shadow(ambElv) %>%
+    add_water(detect_water(elvM), color = "lightblue") %>%
   plot_3d(elvM, solid = TRUE, water = TRUE, shadow = TRUE, watercolor = "lightblue", background = "white", waterdepth = 0, windowsize = c(1000, 800), wateralpha = 0.7, waterlinealpha = 0.5, theta = thetavalues[i])
   
   rgl::snapshot3d(paste0("3d_pittsburgh_", i ,".png"))

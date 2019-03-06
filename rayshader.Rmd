@@ -15,9 +15,10 @@ require(rgdal)
 require(elevatr)
 require(rgl)
 
-source("map-image-api.R")
+source("https://raw.githubusercontent.com/wcmbishop/rayshader-demo/master/R/map-image-api.R")
 
-pitBounds <- readOGR("http://pghgis-pittsburghpa.opendata.arcgis.com/datasets/a99f25fffb7b41c8a4adf9ea676a3a0b_0.geojson")
+pitBounds <- readOGR("http://pghgis-pittsburghpa.opendata.arcgis.com/datasets/a99f25fffb7b41c8a4adf9ea676a3a0b_0.geojson") %>%
+  spTransform(CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
 
 elv <- get_elev_raster(pitBounds, z =14)
 
